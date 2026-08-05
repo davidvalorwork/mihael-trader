@@ -116,21 +116,37 @@ estructurados no cubrieron. Si Twitter/Reddit devuelven error de sesión,
 recordar al usuario que corra `agent-reach configure` él mismo dentro de WSL
 (requiere su cookie/sesión real — no automatizar ese paso).
 
-### Búsqueda web en vivo (SearXNG) — pendiente de instalar
+### Búsqueda web en vivo (SearXNG) — infraestructura lista, sin código todavía
 
-Todavía no está en `install.ps1`. Cuando se agregue: autohospedado vía Docker,
-gratis, sin límite de peticiones (INVESTIGACION.md sección 1.5/8).
+`install.ps1` levanta un contenedor Docker en `http://localhost:8888`. No hay
+todavía ningún script que lo consulte — para usarlo hoy, hacer una petición
+HTTP directa (p. ej. `http://localhost:8888/search?q=...&format=json`) desde
+Bash con `curl`, hasta que exista una herramienta dedicada.
+
+### Vector DB (Qdrant) — infraestructura lista, sin código todavía
+
+`install.ps1` levanta Qdrant en `http://localhost:6333`. El pipeline RAG que
+lo llene y lo consulte (embeddings, chunking, hybrid search) todavía no está
+construido.
+
+### LLM local de respaldo (Ollama) — opcional, solo si la PC tiene GPU NVIDIA
+
+`install.ps1` lo instala y descarga `qwen3:8b` automáticamente si detecta una
+GPU NVIDIA. Sin GPU, se omite — el plan por defecto sigue siendo la rotación
+de niveles gratuitos en la nube (Groq/Gemini/OpenRouter, INVESTIGACION.md 8).
 
 ## Qué está construido vs. pendiente (actualizar esta lista al avanzar)
 
 - [x] Investigación completa (`INVESTIGACION.md`)
-- [x] Instalador base + Agent Reach vía WSL2 (`install.ps1`)
+- [x] Instalador completo (`install.ps1`): Node.js, dependencias del proyecto,
+      WSL2 + Agent Reach, Docker + SearXNG + Qdrant, Ollama (si hay GPU)
 - [x] Indicadores técnicos deterministicos (`scripts/indicators.ts`)
 - [x] Gate de riesgo pre-operación (`scripts/risk-check.ts`)
 - [x] Log de auditoría post-operación (`scripts/log-order.ts`)
 - [x] MCP de Robinhood registrado (`.mcp.json`) — **falta autenticar en la PC del familiar/amigo**
-- [ ] SearXNG autohospedado (búsqueda web en vivo)
-- [ ] Pipeline RAG (embeddings BGE-M3 locales, pgvector/Qdrant, reranking)
+- [x] SearXNG y Qdrant corriendo (contenedores) — **falta el código que los use**
+- [ ] Pipeline RAG (embeddings BGE-M3 locales, chunking, hybrid search + reranking sobre Qdrant)
+- [ ] Enrutamiento de LLM gratuito (Groq/Gemini/OpenRouter) con reintento/espaciado
 - [ ] Puente Claude Code ↔ Telegram (el usuario lo conecta más adelante)
 - [ ] Consentimiento por escrito del familiar/amigo (fuera del código, ver INVESTIGACION.md 6.4)
 - [ ] Ajustar `config/risk-limits.json` con límites reales acordados
