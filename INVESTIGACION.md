@@ -1,6 +1,6 @@
 # Investigación: Sistema RAG de IA para Trading + Telegram + Robinhood
 
-> Documento de investigación previo a la implementación. Última actualización: 5 de agosto de 2026 (v5 — se añadió análisis técnico, elección LLM por suscripción vs API, detalle de copytrading/stop-loss/cierre de posiciones en Robinhood, el escenario específico de operar la cuenta de un familiar/amigo sin cobro, la decisión de despliegue local en su PC personal con Telegram solo para él, y una **pasada de verificación doble** de todas las librerías/repos de GitHub recomendadas — ver Nota de verificación justo después del resumen ejecutivo).
+> Documento de investigación previo a la implementación. Última actualización: 5 de agosto de 2026 (v6 — se añadió análisis técnico, elección LLM por suscripción vs API, detalle de copytrading/stop-loss/cierre de posiciones en Robinhood, el escenario específico de operar la cuenta de un familiar/amigo sin cobro, la decisión de despliegue local en su PC personal con Telegram solo para él, una **pasada de verificación doble** de todas las librerías/repos de GitHub recomendadas, y la sección 1.5 sobre **búsqueda web de IA en vivo** como complemento al RAG).
 > Objetivo: determinar el mejor esquema/arquitectura RAG de IA para trading, más reciente disponible, e investigar la integración con Telegram y con el broker Robinhood, antes de escribir código.
 
 ---
@@ -15,6 +15,7 @@
 6. **Tu caso específico (operar la cuenta de tu familiar/amigo, sin cobro)**: al no haber compensación, el detonante clásico de necesitar registrarte como asesor de inversiones (RIA) probablemente no aplica. El problema técnico que sí encontramos — que el OAuth de Robinhood solo soporta redirecciones `localhost`, no callbacks HTTPS alojados — **queda resuelto de forma natural** con tu decisión de instalar el sistema directamente en su PC personal (sección 6.5): al correr todo en su propia máquina, el callback `localhost` es literal, no un workaround. Ya no hace falta que tú sostengas su refresh token en un backend remoto.
 7. **Despliegue**: **local, en la PC personal de tu familiar/amigo**, no en la nube/Vercel. Esto cambia el bot de Telegram de modo *webhook* (pensado para serverless) a modo ***long polling*** (no necesita URL pública), y cambia la pregunta de "uptime 24/7" por "depende de que su PC esté encendida" — ver sección 6.5 para el detalle y las implicaciones operativas.
 8. **Riesgo legal/operativo**: no hay entorno sandbox/paper-trading en Robinhood. Las pruebas iniciales deberían hacerse con montos mínimos en la sub-cuenta "Agentic" aislada que exige el propio flujo de Robinhood.
+9. **Búsqueda web de IA (pregunta que hiciste)**: el diseño original de la sección 1 asumía feeds ya curados (noticias, filings, sentimiento), **no** una herramienta de "buscar en la web ahora mismo". Sí conviene agregarla — la recomendación es usar la **herramienta `web_search` nativa de Claude** (misma cuenta/facturación que ya se usa para los agentes de decisión, con citas URL incluidas) como fuente complementaria para el agente de Noticias/Sentimiento, no como reemplazo del pipeline RAG curado. Ver sección 1.5.
 
 ---
 
@@ -105,6 +106,25 @@
 - Auditoría de 19 estudios de agentes de trading: solo 2/19 usan splits de datos consistentes en el tiempo, 1/19 documenta costos de transacción, 0/19 es completamente reproducible. **Tomar con escepticismo cualquier cifra de retorno reportada en papers.**
 - **"Oracle Fallacy"**: los episodios de memoria recuperados pueden contener narrativas post-hoc sobre resultados que ya ocurrieron, filtrando información futura al contexto de decisión — vigilar esto especialmente si se implementa memoria tipo FinMem.
 - Guardrails recomendados: esquemas de herramientas tipados + motor de riesgo determinístico (el LLM no puede "decidir" violar límites de posición); un almacén de estado de solo lectura para el LLM, actualizado solo por el entorno real (para que el modelo no pueda reescribir su propia verdad); registro de auditoría de cada acción aprobada.
+
+### 1.5 Búsqueda web de IA en vivo — ¿el sistema puede "buscar en la web" para encontrar señales?
+
+Esto responde directamente a la pregunta de si el sistema tiene conexión a búsquedas web de IA. **En el diseño original de esta sección (1.2), no** — se asumía ingesta de feeds ya curados (noticias, filings, sentimiento vía APIs fijas). Investigado el 5-ago-2026: sí conviene agregar una herramienta de búsqueda web en vivo, y hay una opción clara.
+
+**Lo que de verdad hace hoy el framework de referencia (TradingAgents), confirmado revisando su código directamente:** su carpeta `dataflows/` solo tiene integraciones fijas — Alpha Vantage, Yahoo Finance (`yfinance`, incluyendo su feed de noticias), Reddit, StockTwits, Polymarket y FRED. **No tiene ninguna herramienta de búsqueda web genérica.** Hay un issue abierto en su GitHub ([#699](https://github.com/TauricResearch/TradingAgents/issues/699)) donde la propia comunidad señala que el "Social Media Analyst" no tiene, en la práctica, ningún dato social real, y que el analista de noticias depende de ~20 artículos de Yahoo Finance — un vacío real que ni el framework de referencia ha cerrado todavía. La solución que propone la comunidad es un SearXNG autohospedado (metabuscador gratuito), no una API comercial de búsqueda con IA — priorizando costo/control por encima de qué tan "en vivo" es.
+
+**Opciones para agregarla a este proyecto:**
+
+| Opción | Costo | Notas |
+|---|---|---|
+| **Herramienta `web_search` nativa de Claude** (Messages API) | $10 por 1.000 búsquedas + tokens normales del contenido devuelto | **Recomendada como primera opción**: misma cuenta/facturación que ya se usa para los agentes de decisión (Claude API), sin vendor nuevo. Devuelve citas estructuradas (URL, título, antigüedad de la página) — útil para que el agente de Noticias/Sentimiento pueda respaldar cada afirmación con una fuente, algo valioso para auditar después qué "vio" el sistema antes de una operación. |
+| Herramienta de búsqueda web de OpenAI (Responses API) | Mismo orden de precio ($10/1.000) | Sin ventaja clara de costo o frescura sobre la de Claude — no aporta nada si no se va a usar OpenAI para otra cosa; agregaría una cuenta/vendor más sin necesidad. |
+| **Tavily** (modo `advanced`) | ~$3-8 por 1.000 según volumen | La opción más recomendada específicamente para frescura "del día" en noticias financieras que se mueven rápido — usada por defecto en varios agentes financieros construidos con LangChain/LangGraph. |
+| Brave Search API | ~$4-5 por 1.000 | Índice propio, tiene endpoint de "News" pensado para frescura — alternativa válida a Tavily. |
+| Exa | ~$7-15 por 1.000 | Explícitamente señalada como la opción **menos adecuada** para frescura de noticias del mismo día — está optimizada para similitud temática/descubrimiento, no para velocidad. |
+| Perplexity Sonar API | Más caro (~$14-22/1.000 en modo Pro Search) + tokens | No es una API de búsqueda pura, es un paquete LLM+búsqueda — redundante si Claude ya es la capa de razonamiento del proyecto. |
+
+**Recomendación concreta**: activar la herramienta `web_search` nativa de Claude para el agente de Noticias/Sentimiento desde el inicio — al volumen esperado (unas pocas decenas de búsquedas al día) el costo es prácticamente nulo (~$0.30-1/día), no hay vendor nuevo que gestionar, y las citas vienen listas para auditoría. **El pipeline RAG curado (wires, filings) sigue siendo la fuente de verdad principal**; la búsqueda web se trata como una herramienta *complementaria* que el agente usa para "descubrir lo que los feeds no cubrieron" — igual que TradingAgents está intentando resolver ese mismo vacío con su propia comunidad. Ninguna de estas opciones (ni la de Claude, ni la de OpenAI, ni las de terceros) publica una garantía de latencia para noticias de "hace segundos" — todas son búsqueda web general, no un feed de wire — así que si en pruebas reales se nota que la búsqueda de Claude llega tarde en tickers muy rápidos, agregar Tavily en modo `advanced` como segunda herramienta explícita, en vez de reemplazar todo el enfoque.
 
 ---
 
@@ -424,7 +444,8 @@ Confirmaste que el sistema se instalará directamente en la PC personal de tu fa
 | Análisis técnico | **`trading-signals` v8.2.0** (TS, streaming, cero dependencias) — corre nativamente en el proceso local, sin nada que compilar | TA-Lib v0.7.1 + `stockstats` si el pipeline fuera Python |
 | Embeddings | voyage-finance-2 (vía API) | text-embedding-3-large / voyage-context-4 |
 | Vector DB | **pgvector v0.8.6** (Neon) inicialmente | **Qdrant v1.19.0** si la latencia <10ms se vuelve crítica |
-| Búsqueda | Híbrida (BM25 + denso + RRF) + re-ranker (Cohere Rerank) | — |
+| Búsqueda (sobre datos ya indexados) | Híbrida (BM25 + denso + RRF) + re-ranker (Cohere Rerank) | — |
+| Búsqueda web en vivo (descubrir señales fuera de los feeds) | Herramienta `web_search` nativa de Claude ($10/1.000 búsquedas, mismo vendor que el LLM) | Tavily modo `advanced` si se necesita más frescura en tickers muy rápidos |
 | Bot de mensajería | **grammY v1.45.1** (TS), modo **long polling** (sin webhook, sin URL pública) | — |
 | Broker | Robinhood Agentic Trading MCP (OAuth **localhost nativo**, sub-cuenta aislada) | Alpaca (si se necesita sandbox real, stop-loss confirmado, u opciones/cripto más completos) |
 | Custodia del token de Robinhood | Refresh/access token cifrado en disco de su propia PC vía **`@napi-rs/keyring` v1.3.0** (Administrador de credenciales de Windows) — **no `keytar`, archivado desde 2022** | — |
