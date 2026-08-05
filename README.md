@@ -23,13 +23,25 @@ Un sistema que:
 - **Sin cobro, un solo usuario de confianza.** El sistema está pensado para uso personal informal (no un producto/servicio para terceros) — ver la sección 6 de la investigación sobre las implicaciones legales de este límite y por qué no debe convertirse en un servicio multiusuario o remunerado sin volver a evaluar ese ángulo.
 - **Nada de esto es asesoría financiera.** Es un proyecto experimental; el capital que se opera con él debe ser dinero que el usuario esté genuinamente dispuesto a arriesgar.
 
-## Stack técnico (planeado)
+## Stack técnico (planeado — versión 100% gratuita)
 
-Ver la sección 8 de [`INVESTIGACION.md`](./INVESTIGACION.md) para la tabla completa con versiones verificadas. En resumen: Node.js/TypeScript, `grammY` (Telegram), `trading-signals` (indicadores técnicos), Claude API + un modelo abierto barato para volumen alto, embeddings `voyage-finance-2`, `pgvector`/Qdrant para RAG, y el MCP oficial de Robinhood para ejecución — todo supervisado en Windows con `pm2` + `WinSW`.
+Ver la sección 8 de [`INVESTIGACION.md`](./INVESTIGACION.md) para la tabla completa con versiones verificadas. En resumen: Node.js/TypeScript, `grammY` (Telegram), `trading-signals` (indicadores técnicos), LLM vía niveles gratuitos (Groq/Gemini/OpenRouter, con Ollama local como respaldo si hay GPU), embeddings BGE-M3 locales, `pgvector`/Qdrant autohospedados, SearXNG autohospedado para búsqueda web, [Agent Reach](https://github.com/Panniantong/agent-reach) para sentimiento social/noticias sin APIs oficiales, y el MCP oficial de Robinhood para ejecución — todo supervisado en Windows con `pm2` + `WinSW`.
+
+## Instalador
+
+```powershell
+.\install.ps1
+```
+
+Es un instalador incremental: cada pieza del sistema se le agrega a medida que se construye. Hoy instala y configura **Agent Reach** (búsquedas de noticias web y redes sociales).
+
+**Nota importante**: Agent Reach corre dentro de **WSL2** (Ubuntu), no en Windows nativo — está confirmado roto en Windows nativo/Git Bash por sus propios scripts bash internos ([issue #566](https://github.com/Panniantong/agent-reach/issues/566)). El instalador detecta si falta WSL2, lo instala (`wsl --install`), y te avisa si necesitas reiniciar la PC antes de volver a correrlo. El resto del sistema (bot de Telegram, MCP de Robinhood) sigue corriendo nativo en Windows — solo Agent Reach vive en WSL2.
+
+Twitter y Reddit necesitan sesión/cookie de una cuenta real (no tienen "API gratuita" sin login) — ese paso queda manual a propósito: corre `wsl` y luego `agent-reach configure` para configurarlos.
 
 ## Requisitos para instalar (cuando el código esté listo)
 
-- PC con Windows con Node.js instalado.
+- PC con Windows con Node.js instalado, y WSL2 habilitado (el instalador lo configura si falta).
 - Cuenta de Robinhood con Agentic Trading habilitado, con fondos depositados en la sub-cuenta Agentic aislada.
 - Bot de Telegram propio (token vía [@BotFather](https://t.me/BotFather)) y el `chat_id` del usuario autorizado.
 - La autorización OAuth inicial con Robinhood requiere hacerse *en esa misma PC*, con el teléfono del titular de la cuenta a la mano (verificación desde la app de Robinhood).
