@@ -11,6 +11,9 @@ node_modules/
 secrets/
 credentials/
 
+# Runtime state (order log, etc.) — local operational data, not source
+state/
+
 # Build output
 dist/
 build/

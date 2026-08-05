@@ -1,0 +1,21 @@
+{
+  "name": "mihael-trader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Core tools (indicadores tecnicos, chequeo de riesgo) para que Claude opere el sistema de trading de forma segura.",
+  "scripts": {
+    "indicators": "tsx scripts/indicators.ts",
+    "risk-check": "tsx scripts/risk-check.ts",
+    "log-order": "tsx scripts/log-order.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "trading-signals": "^8.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "_nota": "Limites deterministicos que scripts/risk-check.ts aplica ANTES de que se llame a place_equity_order en el MCP de Robinhood. El LLM/Claude no puede saltarse esto - ver INVESTIGACION.md sección 1.4 (guardrails) y sección 9 (riesgos). Ajusta estos numeros segun cuanto capital esta genuinamente dispuesto a arriesgar tu familiar/amigo, antes de operar con dinero real.",
+  "maxOrderNotionalUsd": 100,
+  "maxDailyOrders": 5,
+  "maxOpenPositions": 5,
+  "allowedSymbols": null,
+  "requireReviewBeforePlace": true
+}
