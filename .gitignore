@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets — never commit real credentials or tokens
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.token
+secrets/
+credentials/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
