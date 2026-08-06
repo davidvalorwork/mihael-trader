@@ -1,0 +1,4 @@
+# Los scripts bash necesitan LF si o si (un CRLF en el shebang rompe la ejecucion
+# dentro de WSL2/Linux). Los .ps1 se guardan en CRLF, el estilo nativo de Windows.
+*.sh text eol=lf
+*.ps1 text eol=crlf

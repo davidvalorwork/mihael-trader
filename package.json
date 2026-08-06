@@ -8,9 +8,12 @@
     "indicators": "tsx scripts/indicators.ts",
     "risk-check": "tsx scripts/risk-check.ts",
     "log-order": "tsx scripts/log-order.ts",
+    "bot": "tsx bot/telegram-bot.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
+    "grammy": "^1.45.1",
     "trading-signals": "^8.2.0"
   },
   "devDependencies": {

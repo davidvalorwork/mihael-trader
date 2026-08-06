@@ -375,6 +375,17 @@ Confirmaste que el sistema se instalará directamente en la PC personal de tu fa
 
 **Recomendación concreta de stack para este despliegue**: un único proceso Node.js/TypeScript local (o un ejecutable empaquetado) que incluya: el cliente MCP de Robinhood (con el token guardado cifrado en disco vía **`@napi-rs/keyring`** — no `keytar`, que está archivado/muerto desde dic-2022, confirmado en verificación del 5-ago-2026; `@napi-rs/keyring` es su reemplazo activo, usado incluso por el propio SDK de Azure de Microsoft para migrar fuera de keytar, y soporta el Administrador de credenciales de Windows nativamente), el bot de grammY en modo polling, el pipeline de indicadores técnicos, y las llamadas salientes a las APIs de LLM/embeddings/vector DB en la nube. Ver sección 7 para el diagrama actualizado y sección 8 para el stack completo.
 
+### 6.6 Refinamiento final: todo el sistema vive dentro de WSL2, no en Windows nativo
+
+Decisión posterior: en vez de que solo Agent Reach corra en WSL2 (sección 8.2) y el resto del proceso corra nativo en Windows, **todo el sistema se aisló dentro de una sola distro WSL2** (Node.js, Docker, Agent Reach, bot de Telegram, y Claude Code mismo). Motivación: aislar el sistema de trading de la instalación de Windows que tu familiar/amigo usa para su día a día — si algo en el sistema falla o se compromete, el daño queda contenido a esa distro Linux, no al resto de su PC.
+
+Esto simplifica varias cosas del resto de esta sección:
+- El punto de custodia de credenciales pasa de "su usuario de Windows" a "su distro WSL2" — sigue siendo su misma PC física, pero con un límite de aislamiento adicional entre el sistema de trading y el resto de lo que hace en esa máquina.
+- `@napi-rs/keyring` sigue aplicando (WSL2 puede acceder al Administrador de credenciales de Windows, o usarse con un keyring de Linux dentro de la distro — cualquiera de los dos evita texto plano).
+- El callback `localhost` del OAuth de Robinhood (sección 6.2) sigue funcionando igual: WSL2 reenvía automáticamente `localhost` entre Windows y la distro, así que el navegador de Windows puede completar la autorización sin fricción aunque el proceso que la recibe corra en Linux.
+- `install.ps1` pasó de ser el instalador completo a ser un **bootstrap**: en Windows solo asegura que WSL2 exista y clona el repo dentro de la distro; el instalador real (`scripts/wsl-setup.sh`) corre en Linux e instala todo lo demás — incluyendo ahora Docker Engine nativo de Linux en vez de Docker Desktop para Windows, evitando esa dependencia extra en el lado de Windows.
+- El bot de Telegram (sección 4) no cambia su diseño (long polling, sin webhook) — solo cambia dónde corre.
+
 ---
 
 ## 7. Arquitectura propuesta (visión de alto nivel)
