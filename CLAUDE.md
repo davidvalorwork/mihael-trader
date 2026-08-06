@@ -12,7 +12,7 @@ Code sea el agente** — no un bot Node.js separado orquestando llamadas a LLM.
 
 ## Arquitectura: todo vive dentro de WSL2, aislado de la PC real
 
-Node.js, Docker (SearXNG, Qdrant), Agent Reach y el bot de Telegram corren
+Node.js, Docker (SearXNG, Qdrant), Agent Reach y Claude Code mismo corren
 **dentro de una distro WSL2 (Ubuntu)**, en `~/mihael-trader` — no en la
 instalación de Windows. `install.ps1` es solo un bootstrap: asegura que WSL2
 exista y clona/actualiza el repo ahí dentro; el trabajo real lo hace
@@ -26,6 +26,26 @@ reenvío automático de `localhost` de WSL2 hace que el flujo OAuth de
 Robinhood (que necesita un callback `localhost`, ver INVESTIGACION.md 6.2)
 funcione igual desde ahí, abriendo el navegador de Windows normalmente.
 
+**No hay ningún LLM/API separado que instalar, mantener ni pagar.** Claude
+Code (esta misma sesión, corriendo vía suscripción/CLI) *es* el motor de
+razonamiento del sistema — no un enrutador entre Groq/Gemini/OpenRouter, ni
+un modelo local vía Ollama. Esas opciones se investigaron en
+INVESTIGACION.md secciones 3 y 8 para el escenario de un bot autónomo
+separado, pero ya no aplican: aquí el análisis y la decisión los hace
+directamente esta sesión de Claude Code.
+
+## Regla no negociable: todo por CLI, nada que dependa de una GUI
+
+Cada pieza de este sistema tiene que ser algo que Claude Code pueda invocar
+por línea de comandos (`npm run ...`, `agent-reach ...`, `docker ...`,
+`curl ...`) — nunca una app de escritorio o un panel web que haya que operar
+a mano. Las únicas excepciones son acciones humanas de una sola vez que
+Robinhood/Telegram exigen por diseño y que no se deben automatizar de todos
+modos: la autorización OAuth con Robinhood (navegador + teléfono del
+titular) y crear el bot con @BotFather. Por eso ya no se instala Docker
+Desktop (app de Windows) sino Docker Engine nativo dentro de WSL2, y por eso
+no hay Ollama en el stack — todo lo que queda es CLI de punta a punta.
+
 ## Regla no negociable: ningún número se inventa
 
 Precios, indicadores técnicos, posiciones, saldos y conteos de órdenes del día
@@ -38,10 +58,12 @@ Antes de llamar `place_equity_order` (o cualquier acción que mueva dinero
 real): explicar al usuario qué se va a hacer y por qué, y esperar una
 confirmación explícita. Nunca ejecutar una orden porque "parecía una buena
 idea" durante un análisis — el análisis y la ejecución son pasos separados
-con un humano en medio. El bot de Telegram (ver abajo) ya tiene el patrón de
-botones Aprobar/Rechazar construido y probado — pero **todavía no está
-conectado a Claude Code**, así que hasta que exista ese puente, la
-confirmación viene del chat de Claude Code directamente.
+con un humano en medio. Esa confirmación viene del chat — directamente en
+Claude Code hoy, o por Telegram una vez conectado el plugin (ver abajo):
+mandar la propuesta con la herramienta `reply`, y esperar una respuesta en
+lenguaje natural ("sí"/"no", "adelante", "cancela") antes de continuar. El
+plugin no expone botones — la confirmación es conversacional, no con
+`InlineKeyboard`.
 
 ## Herramientas disponibles
 
@@ -120,22 +142,47 @@ echo '{"symbol":"AAPL","side":"buy","quantity":1,"notionalUsd":230.10,"robinhood
 Correr **solo después** de que el MCP de Robinhood confirme que la orden se
 ejecutó. Alimenta el conteo de `risk-check` del día siguiente/mismo día.
 
-### `npm run bot` — bot de Telegram
+### Telegram — plugin oficial `telegram@claude-plugins-official`, no un bot propio
 
-Bot funcional con grammY en modo *long polling* (sin webhook — no necesita
-URL pública, corre bien dentro de WSL2). Lee `TELEGRAM_BOT_TOKEN` y
-`TELEGRAM_AUTHORIZED_CHAT_ID` de `.env` (copiar de `.env.example`; el token
-lo crea el titular hablando con @BotFather, no se automatiza).
+**Este proyecto no tiene su propio bot de Telegram.** Se usa el plugin
+oficial de Claude Code (ya disponible en `~/.claude/plugins/marketplaces/
+claude-plugins-official/external_plugins/telegram/`), que corre un servidor
+MCP (con `bun`) y conecta Telegram **directamente a esta sesión de Claude
+Code** — los mensajes entrantes llegan como contexto de la conversación, no
+a un proceso separado con comandos hardcodeados.
 
-Comandos ya construidos: `/start`, `/status`, y `/testalert` (demuestra el
-patrón de botones Aprobar/Rechazar con `InlineKeyboard` — no ejecuta nada
-real todavía). Solo procesa updates del `chat_id` en la lista blanca; todo lo
-demás se ignora en silencio.
+**Herramientas que expone al asistente**: `reply` (mandar texto/archivos a
+un `chat_id`, con threading opcional), `react` (reaccionar con un emoji del
+whitelist fijo de Telegram), `edit_message` (editar un mensaje propio previo
+— útil para "analizando..." → resultado). **No hay tool de botones/teclado
+inline** — el patrón de aprobación es conversacional (ver regla de
+confirmación arriba), no `InlineKeyboard`.
 
-**Lo que falta**: conectar este bot con Claude Code, de modo que una señal
-real generada por Claude dispare `sendAlert` con botones, y que aprobar/
-rechazar desde Telegram sea lo que finalmente autorice `place_equity_order`.
-Hoy son dos piezas separadas que funcionan cada una por su lado.
+**Configuración (dentro de una sesión interactiva de `claude`, no se puede
+scriptear — son slash commands):**
+
+```
+/plugin install telegram@claude-plugins-official
+/reload-plugins
+/telegram:configure <token de @BotFather>
+```
+Luego reiniciar la sesión con el flag de canal:
+```
+claude --channels plugin:telegram@claude-plugins-official
+```
+Mandarle un mensaje al bot desde Telegram → responde con un código de pareo →
+`/telegram:access pair <código>` → y por último, bloquear el acceso:
+`/telegram:access policy allowlist` (política por defecto es `pairing`,
+pensada solo para capturar IDs, no para quedarse así).
+
+Detalle completo, control de acceso, grupos, y formato de `access.json` en
+`~/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram/ACCESS.md`.
+
+**Requisito**: `bun` (lo instala `scripts/wsl-setup.sh`) — el servidor MCP
+del plugin corre con `bun run`, no con Node.
+
+**Estado**: plugin disponible, sin configurar todavía (falta el token del
+bot real y el pareo con el `chat_id` del titular).
 
 ### Agent Reach — noticias web y redes sociales
 
@@ -164,13 +211,6 @@ herramienta dedicada.
 Contenedor Docker en `http://localhost:6333`. El pipeline RAG que lo llene y
 lo consulte (embeddings, chunking, hybrid search) todavía no está construido.
 
-### LLM local de respaldo (Ollama) — opcional, solo si hay GPU NVIDIA visible desde WSL2
-
-`scripts/wsl-setup.sh` lo instala y descarga `qwen3:8b` automáticamente si
-detecta la GPU. Sin GPU, se omite — el plan por defecto sigue siendo la
-rotación de niveles gratuitos en la nube (Groq/Gemini/OpenRouter,
-INVESTIGACION.md 8).
-
 ## Qué está construido vs. pendiente (actualizar esta lista al avanzar)
 
 - [x] Investigación completa (`INVESTIGACION.md`)
@@ -179,12 +219,11 @@ INVESTIGACION.md 8).
 - [x] Indicadores técnicos deterministicos (`scripts/indicators.ts`)
 - [x] Gate de riesgo pre-operación (`scripts/risk-check.ts`)
 - [x] Log de auditoría post-operación (`scripts/log-order.ts`)
-- [x] Bot de Telegram funcional (`bot/telegram-bot.ts`) — comandos y botones probados, **sin conectar a Claude Code todavía**
+- [x] `install.ps1`/`wsl-setup.sh` instalan `bun` y el CLI de Claude Code dentro de WSL2
 - [x] MCP de Robinhood registrado (`.mcp.json`) — **falta autenticar con el titular presente**
 - [x] SearXNG y Qdrant corriendo (contenedores) — **falta el código que los use**
 - [ ] Pipeline RAG (embeddings BGE-M3 locales, chunking, hybrid search + reranking sobre Qdrant)
-- [ ] Enrutamiento de LLM gratuito (Groq/Gemini/OpenRouter) con reintento/espaciado
-- [ ] Puente Claude Code ↔ bot de Telegram (hoy son dos piezas separadas)
+- [ ] Configurar el plugin de Telegram de verdad: token real, pareo, `policy allowlist` (pasos en la sección de arriba)
 - [ ] Consentimiento por escrito del familiar/amigo (fuera del código, ver INVESTIGACION.md 6.4)
 - [ ] Ajustar `config/risk-limits.json` con límites reales acordados
 - [ ] Primera autorización OAuth con Robinhood + prueba de `order_type=stop_loss`

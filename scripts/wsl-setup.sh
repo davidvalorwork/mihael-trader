@@ -170,43 +170,54 @@ install_qdrant() {
 }
 
 # ---------------------------------------------------------------------------
-# 5. Ollama — LLM local gratis, solo si hay GPU NVIDIA visible desde WSL2
+# 5. Bun — lo exige el plugin oficial de Telegram para Claude Code
+#    (~/.claude/plugins/.../telegram corre su servidor MCP con bun, no node).
 # ---------------------------------------------------------------------------
-install_ollama_if_gpu() {
-  log_step "Ollama (LLM local, respaldo 100% gratis)"
-  if ! command_exists nvidia-smi; then
-    log_info "No se detectó GPU NVIDIA visible desde WSL2 — se omite."
-    log_info "El sistema sigue funcionando con la rotación de niveles gratuitos en la nube (Groq/Gemini/OpenRouter)."
+install_bun() {
+  log_step "Bun (lo necesita el plugin oficial de Telegram para Claude Code)"
+  if command_exists bun; then
+    log_ok "Ya instalado: $(bun --version)"
     return 0
   fi
-  log_ok "GPU NVIDIA detectada: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'nombre no disponible')"
-  if command_exists ollama; then
-    log_ok "Ollama ya está instalado."
-  else
-    log_info "Instalando Ollama..."
-    curl -fsSL https://ollama.com/install.sh | sh
-  fi
-  log_info "Descargando un modelo pequeño de respaldo (qwen3:8b, ~5GB)..."
-  ollama pull qwen3:8b || log_warn "No se pudo descargar qwen3:8b — revisa https://ollama.com/library y elige uno según la VRAM disponible."
+  log_info "Instalando Bun..."
+  curl -fsSL https://bun.sh/install | bash || {
+    log_warn "No se pudo instalar Bun automáticamente — instálalo a mano: https://bun.sh"
+    return 1
+  }
+  log_ok "Bun instalado. Puede que necesites abrir una terminal nueva para que el PATH lo reconozca."
 }
 
 # ---------------------------------------------------------------------------
-# 6. Bot de Telegram — configuración de .env (el token lo crea el usuario)
+# 6. Claude Code CLI — debe correr DENTRO de esta distro (ver CLAUDE.md)
 # ---------------------------------------------------------------------------
-setup_telegram_env() {
-  log_step "Bot de Telegram"
-  local env_path="$REPO_DIR/.env"
-  if [ -f "$env_path" ]; then
-    log_ok ".env ya existe — no se sobreescribe."
-  else
-    cp "$REPO_DIR/.env.example" "$env_path"
-    log_warn "Creé $env_path a partir de .env.example — falta llenarlo:"
-    log_warn "  1. Habla con @BotFather en Telegram, /newbot, copia el token a TELEGRAM_BOT_TOKEN."
-    log_warn "  2. Escríbele algo a tu bot nuevo, luego visita:"
-    log_warn "     https://api.telegram.org/bot<TU_TOKEN>/getUpdates"
-    log_warn "     y copia el \"chat\":{\"id\": ...} a TELEGRAM_AUTHORIZED_CHAT_ID."
+install_claude_code() {
+  log_step "Claude Code CLI"
+  if command_exists claude; then
+    log_ok "Ya instalado: $(claude --version 2>&1)"
+    return 0
   fi
-  log_info "Para correr el bot: cd $REPO_DIR && npm run bot"
+  log_info "Instalando Claude Code CLI (npm global)..."
+  npm install -g @anthropic-ai/claude-code || {
+    log_warn "No se pudo instalar automáticamente — instálalo a mano: https://docs.claude.com/en/docs/claude-code"
+    return 1
+  }
+  log_ok "Claude Code instalado."
+}
+
+# ---------------------------------------------------------------------------
+# 7. Bot de Telegram — vía el plugin oficial de Claude Code, no un bot propio
+# ---------------------------------------------------------------------------
+remind_telegram_plugin_setup() {
+  log_step "Bot de Telegram (plugin oficial de Claude Code)"
+  log_info "Este proyecto NO tiene su propio bot — usa el plugin 'telegram@claude-plugins-official'"
+  log_info "que ya viene con Claude Code y conecta Telegram directamente a la sesión."
+  log_warn "Pasos manuales (dentro de una sesión interactiva de 'claude', ver CLAUDE.md para el detalle):"
+  log_warn "  1. Habla con @BotFather en Telegram, /newbot, copia el token."
+  log_warn "  2. /plugin install telegram@claude-plugins-official && /reload-plugins"
+  log_warn "  3. /telegram:configure <token>"
+  log_warn "  4. Reiniciar: claude --channels plugin:telegram@claude-plugins-official"
+  log_warn "  5. Mensaje al bot en Telegram -> copia el codigo de pareo -> /telegram:access pair <codigo>"
+  log_warn "  6. /telegram:access policy allowlist (para que nadie mas pueda parear)"
 }
 
 # ---------------------------------------------------------------------------
@@ -226,19 +237,22 @@ if [ "$docker_ready" -eq 0 ]; then
   install_qdrant
 fi
 
-install_ollama_if_gpu
-setup_telegram_env
+install_bun
+install_claude_code
+remind_telegram_plugin_setup
 
 log_step "Resumen"
-log_info "Node.js:     $(command_exists node && node --version || echo FALTA)"
-log_info "Agent Reach: $(command_exists agent-reach && echo instalado || echo FALTA) (Twitter/Reddit: correr 'agent-reach configure' manualmente)"
+log_info "Node.js:      $(command_exists node && node --version || echo FALTA)"
+log_info "Claude Code:  $(command_exists claude && echo instalado || echo FALTA)"
+log_info "Bun:          $(command_exists bun && bun --version || echo FALTA) (lo necesita el plugin de Telegram)"
+log_info "Agent Reach:  $(command_exists agent-reach && echo instalado || echo FALTA) (Twitter/Reddit: correr 'agent-reach configure' manualmente)"
 if [ "$docker_ready" -eq 0 ]; then
-  log_info "SearXNG:     http://localhost:8888"
-  log_info "Qdrant:      http://localhost:6333"
+  log_info "SearXNG:      http://localhost:8888"
+  log_info "Qdrant:       http://localhost:6333"
 else
   log_info "SearXNG/Qdrant: pendientes (Docker no quedó listo — revisa los avisos arriba)"
 fi
-log_info "Ollama:      $(command_exists ollama && echo instalado || echo 'omitido (sin GPU o sin instalar)')"
-log_info "Bot Telegram: revisa $REPO_DIR/.env y corre 'npm run bot'"
+log_info "LLM:          Claude Code (ningún LLM/API separado que instalar o mantener)"
+log_warn "Bot Telegram: instalar el plugin oficial dentro de una sesión de 'claude' (ver pasos arriba y CLAUDE.md)."
 log_warn "Robinhood MCP: pendiente de autorización OAuth — abre Claude Code y sigue CLAUDE.md."
 echo -e "\nTodo el sistema vive dentro de esta distro de WSL2 — aislado de la instalación real de Windows."
