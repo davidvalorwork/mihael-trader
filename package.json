@@ -8,10 +8,16 @@
     "indicators": "tsx scripts/indicators.ts",
     "risk-check": "tsx scripts/risk-check.ts",
     "log-order": "tsx scripts/log-order.ts",
+    "rag:ingest": "tsx scripts/rag/ingest.ts",
+    "rag:search": "tsx scripts/rag/search.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "trading-signals": "^8.2.0"
+    "@huggingface/transformers": "^4.2.0",
+    "@qdrant/js-client-rest": "^1.19.0",
+    "trading-signals": "^8.2.0",
+    "wink-bm25-text-search": "^3.1.2",
+    "wink-nlp-utils": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

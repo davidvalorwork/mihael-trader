@@ -229,10 +229,35 @@ usarlo hoy, hacer una petición HTTP directa (p. ej.
 `curl 'http://localhost:8888/search?q=...&format=json'`) hasta que exista una
 herramienta dedicada.
 
-### Vector DB (Qdrant) — infraestructura lista, sin código todavía
+### Pipeline RAG (`scripts/rag/`) — construido y probado con datos reales
 
-Contenedor Docker en `http://localhost:6333`. El pipeline RAG que lo llene y
-lo consulte (embeddings, chunking, hybrid search) todavía no está construido.
+Todo local, sin API, sin Ollama — verificado en vivo el 5-ago-2026:
+
+- **Embeddings**: `Xenova/bge-m3` (ONNX, vía `@huggingface/transformers`, corre en Node) — 1024 dimensiones. Primera llamada descarga el modelo (~1GB); después queda cacheado.
+- **Reranker**: `Xenova/bge-reranker-base` — el modelo recomendado en INVESTIGACION.md (`bge-reranker-v2-m3`) **no tiene conversión ONNX publicada**, se usa este en su lugar.
+- **Vector DB**: Qdrant (colección `mihael_trader_chunks`, ids como UUID determinístico derivado del id real del chunk — Qdrant exige entero o UUID, no strings arbitrarios).
+- **BM25**: `wink-bm25-text-search`, reconstruido en memoria en cada búsqueda sobre `state/rag/corpus.jsonl` — suficiente a escala personal.
+- **Fusión**: Reciprocal Rank Fusion (`scripts/rag/rrf.ts`) sobre BM25 + denso, luego reranking de los top-20.
+
+```bash
+# Ingestar documentos (noticias, filings, etc.)
+echo '[{"id":"news-1","text":"...","metadata":{"ticker":"AAPL","source":"Finnhub","title":"...","publishedAt":"2026-08-05"}}]' | npm run rag:ingest
+
+# Buscar
+echo '{"query":"resultados trimestrales AAPL","limit":5}' | npm run rag:search
+```
+
+Probado de punta a punta con noticias de muestra: una query sobre "Apple earnings iPhone revenue" recuperó correctamente tanto el documento con coincidencia léxica exacta como uno que hablaba de "el gigante de Cupertino" sin mencionar "Apple" — confirma que la mitad densa (semántica) está aportando algo que BM25 solo no captaría.
+
+**Lo que falta**: conectar `rag:ingest` a fuentes de datos reales (Finnhub, GDELT, Agent Reach, SearXNG) — hoy se alimenta a mano con JSON. `npm audit` marca 2 vulnerabilidades "high" sin fix disponible (`adm-zip` vía `onnxruntime-node`, `sharp`) — riesgo bajo aquí porque no procesamos ZIPs ni imágenes de terceros, pero vale la pena revisar `npm audit` de nuevo cuando se actualicen las dependencias.
+
+### Búsqueda web en vivo (SearXNG) — infraestructura lista, sin código todavía
+
+Contenedor Docker en `http://localhost:8888` (accesible tanto desde dentro de
+WSL2 como desde Windows). No hay todavía ningún script que lo consulte — para
+usarlo hoy, hacer una petición HTTP directa (p. ej.
+`curl 'http://localhost:8888/search?q=...&format=json'`) hasta que exista una
+herramienta dedicada — sería la fuente natural para alimentar `rag:ingest`.
 
 ## Qué está construido vs. pendiente (actualizar esta lista al avanzar)
 
@@ -244,8 +269,8 @@ lo consulte (embeddings, chunking, hybrid search) todavía no está construido.
 - [x] Log de auditoría post-operación (`scripts/log-order.ts`)
 - [x] `install.ps1`/`wsl-setup.sh` instalan `bun` y el CLI de Claude Code dentro de WSL2
 - [x] MCP de Robinhood registrado (`.mcp.json`) — **falta autenticar con el titular presente**
-- [x] SearXNG y Qdrant corriendo (contenedores) — **falta el código que los use**
-- [ ] Pipeline RAG (embeddings BGE-M3 locales, chunking, hybrid search + reranking sobre Qdrant)
+- [x] Pipeline RAG completo y probado (`scripts/rag/`): chunking, embeddings BGE-M3, Qdrant, BM25, RRF, reranking — **falta conectarlo a fuentes de datos reales** (hoy se alimenta a mano)
+- [x] SearXNG corriendo (contenedor) — **falta el código que lo use** (sería la fuente natural para `rag:ingest`)
 - [x] `send_buttons` agregado al plugin de Telegram (fork local, ver advertencia arriba)
 - [ ] Configurar el plugin de Telegram de verdad: token real, pareo, `policy allowlist` (pasos en la sección de arriba)
 - [ ] Consentimiento por escrito del familiar/amigo (fuera del código, ver INVESTIGACION.md 6.4)
