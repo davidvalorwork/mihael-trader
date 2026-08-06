@@ -59,11 +59,12 @@ real): explicar al usuario qué se va a hacer y por qué, y esperar una
 confirmación explícita. Nunca ejecutar una orden porque "parecía una buena
 idea" durante un análisis — el análisis y la ejecución son pasos separados
 con un humano en medio. Esa confirmación viene del chat — directamente en
-Claude Code hoy, o por Telegram una vez conectado el plugin (ver abajo):
-mandar la propuesta con la herramienta `reply`, y esperar una respuesta en
-lenguaje natural ("sí"/"no", "adelante", "cancela") antes de continuar. El
-plugin no expone botones — la confirmación es conversacional, no con
-`InlineKeyboard`.
+Claude Code hoy, o por Telegram una vez conectado el plugin (ver abajo): usar
+la herramienta `send_buttons` con botones tipo "✅ Aprobar" / "❌ Rechazar"
+(cada uno con un `value` corto que identifique la orden, p. ej.
+`approve:<id>`/`reject:<id>`) — es preferible a pedir una respuesta en texto
+libre, porque no hay ambigüedad que interpretar. Un tap llega de vuelta como
+mensaje normal de canal: `"Pressed button: approve:<id>"`.
 
 ## Herramientas disponibles
 
@@ -154,9 +155,31 @@ a un proceso separado con comandos hardcodeados.
 **Herramientas que expone al asistente**: `reply` (mandar texto/archivos a
 un `chat_id`, con threading opcional), `react` (reaccionar con un emoji del
 whitelist fijo de Telegram), `edit_message` (editar un mensaje propio previo
-— útil para "analizando..." → resultado). **No hay tool de botones/teclado
-inline** — el patrón de aprobación es conversacional (ver regla de
-confirmación arriba), no `InlineKeyboard`.
+— útil para "analizando..." → resultado), y **`send_buttons`** (ver nota
+abajo — no viene de fábrica, se agregó para este proyecto).
+
+**`send_buttons` — agregado a mano en `server.ts`, no es parte del plugin oficial.**
+El plugin de fábrica no traía tool de botones para uso general (solo tenía
+`InlineKeyboard` cableado internamente a su propio flujo de permisos de
+Claude Code). Se extendió `server.ts` para exponer un tool genérico:
+
+- `send_buttons({chat_id, text, buttons: [{label, value}, ...], reply_to?})` — manda el mensaje con hasta 8 botones en una fila.
+- Un tap llega a esta sesión como un mensaje de canal normal: `content: "Pressed button: <value>"` — no hay un tool de callback separado, se trata igual que cualquier mensaje de texto entrante.
+- Mismo nivel de seguridad que los botones de permisos del propio plugin: solo remitentes en `allowFrom` (DM, no grupos) pueden disparar un botón.
+- El mensaje se edita después del tap para mostrar qué se eligió (mismo patrón visual que usa el plugin para sus propios botones de permiso).
+
+**⚠️ Riesgo de mantenimiento**: esto vive en
+`~/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram/server.ts`,
+un archivo **global y gestionado por el marketplace de plugins** — no es
+parte de este repo. Una futura `/plugin update` de `telegram@claude-plugins-official`
+puede sobreescribir este archivo y borrar el cambio. Si `send_buttons` deja
+de aparecer en la lista de herramientas, hay que volver a aplicar esta
+extensión — el diff está descrito aquí y en INVESTIGACION.md sección 4.5;
+consiste en: (1) un nuevo tool `send_buttons` en `ListToolsRequestSchema`,
+(2) su handler en `CallToolRequestSchema` (arma un `InlineKeyboard`,
+`callback_data` con prefijo `btn:`), y (3) una rama al inicio de
+`bot.on('callback_query:data', ...)` que reconoce el prefijo `btn:` y
+reenvía el valor como `notifications/claude/channel`.
 
 **Configuración (dentro de una sesión interactiva de `claude`, no se puede
 scriptear — son slash commands):**
@@ -223,6 +246,7 @@ lo consulte (embeddings, chunking, hybrid search) todavía no está construido.
 - [x] MCP de Robinhood registrado (`.mcp.json`) — **falta autenticar con el titular presente**
 - [x] SearXNG y Qdrant corriendo (contenedores) — **falta el código que los use**
 - [ ] Pipeline RAG (embeddings BGE-M3 locales, chunking, hybrid search + reranking sobre Qdrant)
+- [x] `send_buttons` agregado al plugin de Telegram (fork local, ver advertencia arriba)
 - [ ] Configurar el plugin de Telegram de verdad: token real, pareo, `policy allowlist` (pasos en la sección de arriba)
 - [ ] Consentimiento por escrito del familiar/amigo (fuera del código, ver INVESTIGACION.md 6.4)
 - [ ] Ajustar `config/risk-limits.json` con límites reales acordados
